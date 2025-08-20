@@ -27,6 +27,7 @@ import org.wso2.carbon.identity.api.server.common.error.APIError;
 import org.wso2.carbon.identity.api.server.common.error.ErrorResponse;
 import org.wso2.carbon.identity.api.server.workflow.common.Constants;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
+import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.InstanceStatus;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.Operation;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.OptionDetails;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowAssociationListItem;
@@ -34,6 +35,9 @@ import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowAssoci
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowAssociationPatchRequest;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowAssociationRequest;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowAssociationResponse;
+import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowInstanceListItem;
+import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowInstanceListResponse;
+import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowInstanceResponse;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowListItem;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowListResponse;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowRequest;
@@ -41,6 +45,9 @@ import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowRespon
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowTemplateBase;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowTemplateParameters;
 import org.wso2.carbon.identity.rest.api.server.workflow.v1.model.WorkflowTemplateParametersBase;
+import org.wso2.carbon.identity.workflow.engine.ApprovalTaskService;
+import org.wso2.carbon.identity.workflow.engine.exception.WorkflowEngineClientException;
+import org.wso2.carbon.identity.workflow.engine.exception.WorkflowEngineException;
 import org.wso2.carbon.identity.workflow.mgt.WorkflowManagementService;
 import org.wso2.carbon.identity.workflow.mgt.bean.Parameter;
 import org.wso2.carbon.identity.workflow.mgt.bean.Workflow;
@@ -49,6 +56,12 @@ import org.wso2.carbon.identity.workflow.mgt.dto.WorkflowEvent;
 import org.wso2.carbon.identity.workflow.mgt.exception.WorkflowClientException;
 import org.wso2.carbon.identity.workflow.mgt.exception.WorkflowException;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -60,20 +73,23 @@ import java.util.UUID;
 import javax.ws.rs.core.Response;
 
 /**
- * Workflow service class
+ * Workflow service class.
  */
 public class WorkflowService {
 
     private static final Log log = LogFactory.getLog(WorkflowService.class);
     private final WorkflowManagementService workflowManagementService;
+    private final ApprovalTaskService approvalEventService;
 
-    public WorkflowService(WorkflowManagementService workflowManagementService) {
+    public WorkflowService(WorkflowManagementService workflowManagementService,
+                           ApprovalTaskService approvalEventService) {
 
         this.workflowManagementService = workflowManagementService;
+        this.approvalEventService = approvalEventService;
     }
 
     /**
-     * Add new workflow
+     * Add new workflow.
      *
      * @param workflow Workflow details
      * @return WorkflowResponse
@@ -82,7 +98,8 @@ public class WorkflowService {
 
         Workflow currentWorkflow;
         try {
-            if (workflowManagementService.isWorkflowExistByName(workflow.getName())) {
+            String tenantDomain = CarbonContext.getThreadLocalCarbonContext().getTenantDomain();
+            if (workflowManagementService.isWorkflowExistByName(workflow.getName(), tenantDomain)) {
                 throw new WorkflowClientException("A workflow with name: " + workflow.getName() + " already exists.");
             }
             String workflowId = UUID.randomUUID().toString();
@@ -100,7 +117,7 @@ public class WorkflowService {
     }
 
     /**
-     * Update an existing workflow
+     * Update an existing workflow.
      *
      * @param workflow   Workflow details
      * @param workflowId Workflow ID
@@ -129,7 +146,7 @@ public class WorkflowService {
     }
 
     /**
-     * Retrieve workflow from workflow ID
+     * Retrieve workflow from workflow ID.
      *
      * @param workflowId workflow id
      * @return WorkflowResponse
@@ -180,7 +197,7 @@ public class WorkflowService {
     }
 
     /**
-     * Remove a workflow by a given workflow ID
+     * Remove a workflow by a given workflow ID.
      *
      * @param workflowId ID of workflow to remove
      */
@@ -238,14 +255,14 @@ public class WorkflowService {
     }
 
     /**
-     * Partially update an association
+     * Partially update an association.
      *
      * @param associationId       Association ID
      * @param workflowAssociation Association Details
      * @return WorkflowAssociationResponse
      */
     public WorkflowAssociationResponse updateAssociation(String associationId,
-                                                         WorkflowAssociationPatchRequest workflowAssociation) {
+            WorkflowAssociationPatchRequest workflowAssociation) {
 
         boolean isEnable;
         String eventId;
@@ -274,7 +291,7 @@ public class WorkflowService {
     }
 
     /**
-     * Get an association by ID
+     * Get an association by ID.
      *
      * @param associationId Association ID
      * @return WorkflowAssociationResponse
@@ -322,7 +339,7 @@ public class WorkflowService {
     }
 
     /**
-     * Remove association
+     * Remove association.
      *
      * @param associationId ID of association to remove
      */
@@ -376,8 +393,8 @@ public class WorkflowService {
     }
 
     private WorkflowListResponse createWorkflowResponse(int tenantId, WorkflowListItem[] workflowListItems,
-                                                        Integer offset,
-                                                        String filter) throws WorkflowException {
+            Integer offset,
+            String filter) throws WorkflowException {
 
         WorkflowListResponse workflowListResponse = new WorkflowListResponse();
         workflowListResponse.setTotalResults(workflowManagementService.getWorkflowsCount(tenantId, filter));
@@ -407,31 +424,36 @@ public class WorkflowService {
     }
 
     /**
-     * Converts a list of `WorkflowTemplateParameters` into a list of `Parameter` objects.
+     * Converts a list of `WorkflowTemplateParameters` into a list of `Parameter`
+     * objects.
      * Example:
      * * Given the following inputs:
      * * - workflowId = "wf123"
      * * - templateProperties = steps = [
-     * *         {step: 1, options: [
-     * *             {entity: "roles", values: ["123", "124"]},
-     * *             {entity: "users", values: ["234", "235"]}
-     * *         ]},
-     * *         {step: 2, options: [
-     * *             {entity: "roles", values: ["345"]}
-     * *         ]}
+     * * {step: 1, options: [
+     * * {entity: "roles", values: ["123", "124"]},
+     * * {entity: "users", values: ["234", "235"]}
+     * * ]},
+     * * {step: 2, options: [
+     * * {entity: "roles", values: ["345"]}
+     * * ]}
      * *
-     * * The output `parameterList` will contain the following list of `Parameter` objects:
+     * * The output `parameterList` will contain the following list of `Parameter`
+     * objects:
      * * - parameterList = [
-     * {workflowId = "wf123", paramName = "ApprovalSteps", paramValue = "123,124", qName = "Step-1-roles", holder =
+     * {workflowId = "wf123", paramName = "ApprovalSteps", paramValue = "123,124",
+     * qName = "Step-1-roles", holder =
      * "TEMPLATE"},
-     * {workflowId = "wf123", paramName = "ApprovalSteps", paramValue = "234,235", qName = "Step-1-users", holder
+     * {workflowId = "wf123", paramName = "ApprovalSteps", paramValue = "234,235",
+     * qName = "Step-1-users", holder
      * = "TEMPLATE"},
-     * {workflowId = "wf123", paramName = "ApprovalSteps", paramValue = "345", qName = "Step-2-roles", holder =
+     * {workflowId = "wf123", paramName = "ApprovalSteps", paramValue = "345", qName
+     * = "Step-2-roles", holder =
      * "TEMPLATE"}
      * ]
      */
     private List<Parameter> createParameterList(String workflowId,
-                                                List<WorkflowTemplateParameters> templateProperties) {
+            List<WorkflowTemplateParameters> templateProperties) {
 
         List<Parameter> parameterList = new ArrayList<>();
         for (WorkflowTemplateParameters properties : templateProperties) {
@@ -448,7 +470,7 @@ public class WorkflowService {
     }
 
     private Parameter setWorkflowImplParameters(String workflowId, String paramName, String paramValue, String qName,
-                                                String holder) {
+            String holder) {
 
         Parameter parameter = new Parameter();
         parameter.setWorkflowId(workflowId);
@@ -526,10 +548,9 @@ public class WorkflowService {
     }
 
     private WorkflowAssociationListResponse createAssociationListResponse(int tenantId,
-                                                                          WorkflowAssociationListItem[]
-                                                                                  workflowAssociationListItems,
-                                                                          Integer offset,
-                                                                          String filter) throws WorkflowException {
+            WorkflowAssociationListItem[] workflowAssociationListItems,
+            Integer offset,
+            String filter) throws WorkflowException {
 
         WorkflowAssociationListResponse workflowAssociationListResponse = new WorkflowAssociationListResponse();
         workflowAssociationListResponse.setTotalResults(workflowManagementService.getAssociationsCount(tenantId,
@@ -573,6 +594,487 @@ public class WorkflowService {
             associationResponse.setIsEnabled(association.isEnabled());
         }
         return associationResponse;
+    }
+
+    /**
+     * Deletes a workflow instance by its ID.
+     *
+     * @param instanceId The ID of the workflow instance to delete.
+     */
+    public void deleteWorkflowInstance(String instanceId) {
+
+        try {
+            if (StringUtils.isBlank(instanceId)) {
+                throw new WorkflowClientException("Workflow instance ID cannot be null or empty.");
+            }
+            workflowManagementService.deleteWorkflowRequestCreatedByAnyUser(instanceId);
+            approvalEventService.deletePendingApprovalTasks(instanceId);
+        } catch (WorkflowClientException e) {
+            throw handleClientError(Constants.ErrorMessage.ERROR_CODE_CLIENT_ERROR_DELETING_WORKFLOW_INSTANCE,
+                    instanceId, e);
+        } catch (WorkflowEngineClientException e) {
+            throw handleClientError(Constants.ErrorMessage.ERROR_CODE_CLIENT_ERROR_DELETING_WORKFLOW_INSTANCE,
+                    instanceId, new WorkflowClientException(e.getMessage(), e));
+        } catch (WorkflowException | WorkflowEngineException e) {
+            throw handleServerError(Constants.ErrorMessage.ERROR_CODE_ERROR_DELETING_WORKFLOW_INSTANCE, instanceId, e);
+        }
+    }
+
+    /**
+     * Retrieves a workflow instance by its ID.
+     *
+     * @param instanceId The ID of the workflow instance to retrieve.
+     * @return WorkflowInstanceResponse containing the workflow instance details.
+     */
+    public WorkflowInstanceResponse getWorkflowInstanceById(String instanceId) {
+
+        try {
+            if (StringUtils.isBlank(instanceId)) {
+                throw new WorkflowClientException("Workflow instance ID cannot be null or empty.");
+            }
+            org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest workflowRequest = workflowManagementService
+                    .getWorkflowRequestBean(instanceId);
+            if (workflowRequest == null) {
+                throw new WorkflowClientException("Workflow instance with ID: " + instanceId + " does not exist.");
+            }
+            return mapWorkflowRequestToWorkflowRequestResponse(workflowRequest);
+        } catch (WorkflowClientException e) {
+            throw handleClientError(Constants.ErrorMessage.ERROR_CODE_CLIENT_ERROR_WORKFLOW_INSTANCE_NOT_FOUND,
+                    instanceId, e);
+        } catch (WorkflowException e) {
+            throw handleServerError(Constants.ErrorMessage.ERROR_CODE_ERROR_RETRIEVING_WORKFLOW_INSTANCE, instanceId,
+                    e);
+        }
+    }
+
+    /**
+     * Retrieves a list of workflow instances with pagination and filtering.
+     *
+     * @param limit  Maximum number of instances to return.
+     * @param offset Offset for pagination.
+     * @param filter Filter string to apply on the results.
+     * @return WorkflowInstanceListResponse containing the list of workflow instances.
+     */
+    public WorkflowInstanceListResponse getWorkflowInstances(Integer limit, Integer offset, String filter) {
+
+        limit = validateLimit(limit);
+        offset = validateOffset(offset);
+        try {
+            return getPaginatedWorkflowInstances(limit, offset, filter);
+        } catch (WorkflowClientException e) {
+            throw handleClientError(Constants.ErrorMessage.ERROR_CODE_CLIENT_ERROR_LISTING_WORKFLOW_INSTANCES, null, e);
+        } catch (WorkflowException e) {
+            throw handleServerError(Constants.ErrorMessage.ERROR_CODE_ERROR_LISTING_WORKFLOW_INSTANCES, null, e);
+        }
+    }
+
+    /**
+     * Maps a WorkflowRequest object to a WorkflowInstanceResponse object.
+     *
+     * @param workflowRequest The WorkflowRequest object to map.
+     * @return WorkflowInstanceResponse object containing the mapped data.
+     * @throws WorkflowException If an error occurs during mapping.
+     */
+    private WorkflowInstanceResponse mapWorkflowRequestToWorkflowRequestResponse(
+            org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest workflowRequest)
+            throws WorkflowException {
+
+        if (workflowRequest == null) {
+            return null;
+        }
+        WorkflowInstanceResponse response = new WorkflowInstanceResponse();
+        response.setWorkflowInstanceId(workflowRequest.getRequestId());
+        response.setEventType(Operation.fromValue(workflowRequest.getOperationType()));
+        response.setRequestInitiator(workflowRequest.getCreatedBy());
+        try {
+            if (workflowRequest.getCreatedAt() != null) {
+                response.setCreatedAt(workflowRequest.getCreatedAt());
+            }
+            if (workflowRequest.getUpdatedAt() != null) {
+                response.setUpdatedAt(workflowRequest.getUpdatedAt());
+            }
+        } catch (DateTimeParseException e) {
+            throw new WorkflowClientException("Invalid date format from database. Expected: yyyy-MM-dd:HH:mm:ss.SSS");
+        }
+
+        response.setStatus(InstanceStatus.fromValue(workflowRequest.getStatus()));
+        response.setRequestParameters(workflowRequest.getRequestParams());
+        return response;
+    }
+
+    /**
+     * Maps a WorkflowRequest object to a WorkflowInstanceListItem object.
+     *
+     * @param workflowRequest The WorkflowRequest object to map.
+     * @return WorkflowInstanceListItem object containing the mapped data.
+     */
+    private WorkflowInstanceListItem mapWorkflowRequestToListItem(
+            org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest workflowRequest) {
+
+        if (workflowRequest == null) {
+            return null;
+        }
+
+        WorkflowInstanceListItem workflowInstanceListItem = new WorkflowInstanceListItem();
+        workflowInstanceListItem.setWorkflowInstanceId(workflowRequest.getRequestId());
+        workflowInstanceListItem.setEventType(Operation.fromValue(workflowRequest.getOperationType()));
+        workflowInstanceListItem.setRequestInitiator(workflowRequest.getCreatedBy());
+        workflowInstanceListItem.setCreatedAt(workflowRequest.getCreatedAt());
+        workflowInstanceListItem.setUpdatedAt(workflowRequest.getUpdatedAt());
+        workflowInstanceListItem.setStatus(InstanceStatus.fromValue(workflowRequest.getStatus()));
+        return workflowInstanceListItem;
+    }
+
+    /**
+     * Retrieves paginated workflow instances based on the provided parameters.
+     *
+     * @param limit  Maximum number of instances to return.
+     * @param offset Offset for pagination.
+     * @param filter Filter string to apply on the results.
+     * @return WorkflowInstanceListResponse containing the list of workflow instances.
+     * @throws WorkflowException If an error occurs while retrieving the instances.
+     */
+    private WorkflowInstanceListResponse getPaginatedWorkflowInstances(Integer limit, Integer offset, String filter)
+            throws WorkflowException {
+
+        String user = null;
+        int tenantId = CarbonContext.getThreadLocalCarbonContext().getTenantId();
+
+        WorkflowInstanceListResponse workflowInstanceListResponse = new WorkflowInstanceListResponse();
+        workflowInstanceListResponse.setInstances(new ArrayList<>());
+
+        Map<String, String> filterMap = parseWorkflowFilter(filter);
+
+        String beginDate = "1950-01-01 00:00:00.000";
+        String endDate = getCurrentDateTime();
+        String dateCategory = null;
+        String status = null;
+        String operationType = null;
+
+        if (!filterMap.isEmpty()) {
+            if (StringUtils.isNotEmpty(filterMap.get(Constants.WORKFLOW_INSTANCE_REQUEST_TYPE_KEY))) {
+                String requestType = filterMap.get(Constants.WORKFLOW_INSTANCE_REQUEST_TYPE_KEY);
+                if (!Constants.WORKFLOW_INSTANCE_MY_TASKS_REQUEST_TYPE.equals(requestType) &&
+                        !Constants.WORKFLOW_INSTANCE_ALL_TASKS_REQUEST_TYPE.equals(requestType)) {
+                    throw new WorkflowClientException("Invalid request type: " + requestType +
+                            ". Valid types are 'MY_TASKS' and 'ALL_TASKS'.");
+                }
+                if (Constants.WORKFLOW_INSTANCE_MY_TASKS_REQUEST_TYPE.equals(requestType)) {
+                    user = CarbonContext.getThreadLocalCarbonContext().getUsername();
+                }
+            }
+
+            if (StringUtils.isNotEmpty(filterMap.get(Constants.WORKFLOW_INSTANCE_CREATED_START_DATE_KEY))) {
+                beginDate = filterMap.get(Constants.WORKFLOW_INSTANCE_CREATED_START_DATE_KEY);
+                dateCategory = "CREATED";
+            } else if (StringUtils.isNotEmpty(filterMap.get(Constants.WORKFLOW_INSTANCE_UPDATED_START_DATE_KEY))) {
+                dateCategory = "UPDATED";
+                beginDate = filterMap.get(Constants.WORKFLOW_INSTANCE_UPDATED_START_DATE_KEY);
+            }
+
+            if (StringUtils.isNotEmpty(filterMap.get(Constants.WORKFLOW_INSTANCE_CREATED_END_DATE_KEY))) {
+                endDate = filterMap.get(Constants.WORKFLOW_INSTANCE_CREATED_END_DATE_KEY);
+                dateCategory = "CREATED";
+            } else if (StringUtils.isNotEmpty(filterMap.get(Constants.WORKFLOW_INSTANCE_UPDATED_END_DATE_KEY))) {
+                dateCategory = "UPDATED";
+                endDate = filterMap.get(Constants.WORKFLOW_INSTANCE_UPDATED_END_DATE_KEY);
+            }
+
+            status = filterMap.get(Constants.WORKFLOW_INSTANCE_STATUS_KEY);
+            operationType = filterMap.get(Constants.WORKFLOW_INSTANCE_OPERATION_TYPE_KEY);
+        }
+
+        org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequestFilterResponse response = workflowManagementService
+                .getRequestsFromFilter(user, operationType, beginDate, endDate, dateCategory, tenantId, status, limit,
+                        offset);
+
+        org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest[] requests = response.getRequests();
+
+        List<WorkflowInstanceListItem> allItems = new ArrayList<>();
+        if (requests != null) {
+            for (org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest workflowRequest : requests) {
+                WorkflowInstanceListItem item = mapWorkflowRequestToListItem(workflowRequest);
+                allItems.add(item);
+            }
+        }
+
+        int totalCount = allItems.size();
+        int startIndex = offset;
+        int totalResult = response.getTotalCount();
+
+        workflowInstanceListResponse.setInstances(allItems);
+        workflowInstanceListResponse.setCount(totalCount);
+        workflowInstanceListResponse.setStartIndex(startIndex + 1);
+        workflowInstanceListResponse.setTotalResults(totalResult);
+
+        return workflowInstanceListResponse;
+    }
+
+    /**
+     * Parses the filter string into a map of field-value pairs.
+     * The expected format is: "field operator value and field operator value ..."
+     * Supported fields: requestType, status, dateCategory, beginDate, endDate
+     * Supported operators: eq (equals), ge (greater than or equal), le (less than or equal)
+     *
+     * @param filter Filter string
+     * @return Map of field-value pairs
+     * @throws WorkflowClientException If the filter format is invalid or unsupported
+     */
+    public Map<String, String> parseWorkflowFilter(String filter) throws WorkflowClientException {
+
+        Map<String, String> result = new HashMap<>();
+
+        if (StringUtils.isBlank(filter)) {
+            return result;
+        }
+        
+        try {
+            // Decode the filter string to handle URL encoding.
+            String decodedFilter = URLDecoder.decode(filter, StandardCharsets.UTF_8.name());
+
+            // Parse the filter string using a more robust approach
+            List<FilterCondition> conditions = parseFilterConditions(decodedFilter);
+
+            // Process each condition and extract field, operator, and value.
+            for (FilterCondition condition : conditions) {
+                String field = condition.getField();
+                String operator = condition.getOperator();
+                String value = condition.getValue();
+
+                switch (field) {
+                    case Constants.WORKFLOW_INSTANCE_REQUEST_TYPE_KEY:
+                    case Constants.WORKFLOW_INSTANCE_STATUS_KEY:
+                    case Constants.WORKFLOW_INSTANCE_OPERATION_TYPE_KEY:
+                        if (Constants.EQUALS_OPERATOR.equals(operator)) {
+                            result.put(field, value);
+                        } else {
+                            throw new WorkflowClientException("Only `eq` operator is supported for " + field +
+                                    ": " + operator);
+                        }
+                        break;
+                    case Constants.WORKFLOW_INSTANCE_CREATED_DATE_KEY:
+                        putValidatedDateInMap(result, Constants.WORKFLOW_INSTANCE_CREATED_DATE_KEY, value,
+                                operator);
+                        break;
+                    case Constants.WORKFLOW_INSTANCE_UPDATED_DATE_KEY:
+                        putValidatedDateInMap(result, Constants.WORKFLOW_INSTANCE_UPDATED_DATE_KEY, value,
+                                operator);
+                        break;
+                    default:
+                        throw new WorkflowClientException("Unknown field in filter: " + field);
+                }
+            }
+        } catch (UnsupportedEncodingException e) {
+            throw new WorkflowClientException("Failed to decode filter string", e);
+        }
+
+        boolean hasCreatedDate = result.containsKey(Constants.WORKFLOW_INSTANCE_CREATED_START_DATE_KEY) ||
+                result.containsKey(Constants.WORKFLOW_INSTANCE_CREATED_END_DATE_KEY);
+        boolean hasUpdatedDate = result.containsKey(Constants.WORKFLOW_INSTANCE_UPDATED_START_DATE_KEY) ||
+                result.containsKey(Constants.WORKFLOW_INSTANCE_UPDATED_END_DATE_KEY);
+        if (hasCreatedDate && hasUpdatedDate) {
+            throw new WorkflowClientException("Both createdAt and updatedAt date filters cannot be used together.");
+        }
+
+        return result;
+    }
+
+    /**
+     * Parses filter conditions from a filter string using a two-step approach.
+     * First splits by 'and' logical operator, then parses each condition by comparison operators.
+     * 
+     * @param filter The filter string to parse
+     * @return List of FilterCondition objects
+     * @throws WorkflowClientException If the filter format is invalid
+     */
+    private List<FilterCondition> parseFilterConditions(String filter) throws WorkflowClientException {
+        
+        List<FilterCondition> conditions = new ArrayList<>();
+        
+        // Step 1: Split by 'and' logical operator to get individual conditions
+        List<String> conditionStrings = splitByAndLogicalOperator(filter);
+        
+        // Step 2: Parse each condition by comparison operators
+        for (String conditionString : conditionStrings) {
+            FilterCondition condition = parseIndividualCondition(conditionString.trim());
+            conditions.add(condition);
+        }
+        
+        if (conditions.isEmpty()) {
+            throw new WorkflowClientException("No valid filter conditions found");
+        }
+        
+        return conditions;
+    }
+    
+    /**
+     * Splits the filter string by the specified logical operator while preserving spaces within values.
+     * 
+     * @param filter The filter string to split
+     * @return List of condition strings
+     */
+    private List<String> splitByAndLogicalOperator(String filter) {
+
+        String logicalOperator = "and";
+        List<String> conditions = new ArrayList<>();
+        String normalizedFilter = filter.trim();
+        int start = 0;
+        
+        while (start < normalizedFilter.length()) {
+            // Find the next occurrence of the logical operator
+            int operatorPos = findKeywordPosition(normalizedFilter, logicalOperator, start);
+            
+            if (operatorPos == -1) {
+                // No more logical operators found, take the rest as a condition
+                String condition = normalizedFilter.substring(start).trim();
+                if (!condition.isEmpty()) {
+                    conditions.add(condition);
+                }
+                break;
+            }
+            
+            // Extract condition before the logical operator
+            String condition = normalizedFilter.substring(start, operatorPos).trim();
+            if (!condition.isEmpty()) {
+                conditions.add(condition);
+            }
+            
+            // Move past the logical operator
+            start = operatorPos + logicalOperator.length();
+        }
+        
+        return conditions;
+    }
+    
+    /**
+     * Parses an individual condition string to extract field, operator, and value.
+     * 
+     * @param conditionString The individual condition string (e.g., "createdAt ge 2021-07-26:23 45:25.831")
+     * @return FilterCondition object
+     * @throws WorkflowClientException If the condition format is invalid
+     */
+    private FilterCondition parseIndividualCondition(String conditionString) throws WorkflowClientException {
+        
+        String[] comparisonOperators = {"eq", "ge", "le"};
+        
+        // Find the comparison operator in the condition
+        String matchedOperator = null;
+        int matchedOperatorIndex = -1;
+        
+        for (String operator : comparisonOperators) {
+            int keywordPosition = findKeywordPosition(conditionString, operator, 0);
+            if (keywordPosition != -1) {
+                if (matchedOperator == null || keywordPosition < matchedOperatorIndex) {
+                    matchedOperator = operator;
+                    matchedOperatorIndex = keywordPosition;
+                }
+            }
+        }
+        
+        if (matchedOperator == null) {
+            throw new WorkflowClientException("No valid comparison operator found in condition: " + conditionString +
+                ". Supported operators are: eq, ge, le");
+        }
+        
+        // Extract field (before operator)
+        String fieldName = conditionString.substring(0, matchedOperatorIndex).trim();
+        if (fieldName.isEmpty()) {
+            throw new WorkflowClientException("Field name is missing in condition: " + conditionString);
+        }
+        
+        // Extract value (after operator)
+        String fieldValue = conditionString.substring(matchedOperatorIndex + matchedOperator.length()).trim();
+        if (fieldValue.isEmpty()) {
+            throw new WorkflowClientException("Value is missing in condition: " + conditionString);
+        }
+        
+        // Validate operator
+        if (!isValidOperator(matchedOperator)) {
+            throw new WorkflowClientException("Invalid operator: " + matchedOperator +
+                ". Supported operators are: eq, ge, le");
+        }
+        
+        return new FilterCondition(fieldName, matchedOperator, fieldValue);
+    }
+    
+    /**
+     * Finds the position of a keyword in the filter string, ensuring it's surrounded by word boundaries.
+     * 
+     * @param filter The filter string to search in
+     * @param keyword The keyword to find
+     * @param startPosition The position to start searching from
+     * @return The position of the keyword, or -1 if not found
+     */
+    private int findKeywordPosition(String filter, String keyword, int startPosition) {
+        
+        int position = startPosition;
+        while (position < filter.length()) {
+            // Find the keyword (case insensitive)
+            int keywordPosition = filter.indexOf(keyword, position);
+            if (keywordPosition == -1) {
+                return -1;
+            }
+            
+            // Check if it's a whole word (surrounded by non-alphanumeric characters or string boundaries)
+            boolean isValidStart = (keywordPosition == 0)
+                    || !Character.isLetterOrDigit(filter.charAt(keywordPosition - 1));
+            boolean isValidEnd = (keywordPosition + keyword.length() >= filter.length()) ||
+                              !Character.isLetterOrDigit(filter.charAt(keywordPosition + keyword.length()));
+            
+            if (isValidStart && isValidEnd) {
+                return keywordPosition;
+            }
+            
+            // Move past this occurrence and continue searching
+            position = keywordPosition + 1;
+        }
+        
+        return -1;
+    }
+    
+    /**
+     * Validates if the given operator is supported.
+     * 
+     * @param operator The operator to validate
+     * @return true if the operator is valid, false otherwise
+     */
+    private boolean isValidOperator(String operator) {
+
+        return Constants.EQUALS_OPERATOR.equals(operator) ||
+               Constants.GREATER_THAN_OR_EQUAL_OPERATOR.equals(operator) ||
+               Constants.LESS_THAN_OR_EQUAL_OPERATOR.equals(operator);
+    }
+    
+    /**
+     * Inner class to represent a filter condition.
+     */
+    private static class FilterCondition {
+
+        private final String field;
+        private final String operator;
+        private final String value;
+        
+        public FilterCondition(String field, String operator, String value) {
+
+            this.field = field;
+            this.operator = operator;
+            this.value = value;
+        }
+        
+        public String getField() {
+
+            return field;
+        }
+        
+        public String getOperator() {
+
+            return operator;
+        }
+        
+        public String getValue() {
+
+            return value;
+        }
     }
 
     private ErrorResponse.Builder getErrorBuilder(Constants.ErrorMessage errorMsg, String data) {
@@ -625,5 +1127,69 @@ public class WorkflowService {
     private APIError handleClientError(Constants.ErrorMessage errorEnum, String data, WorkflowClientException e) {
 
         throw handleClientError(Response.Status.BAD_REQUEST, errorEnum, data, e);
+    }
+
+    /**
+     * Get the current date time.
+     *
+     * @return The current time formatted as a string.
+     */
+    private String getCurrentDateTime() {
+
+        return LocalDateTime.now().format(Constants.WORKFLOW_INSTANCE_DATE_TIME_FORMATTER);
+    }
+
+    private LocalDateTime parseDateTime(String date, String dateType) throws WorkflowClientException {
+
+        try {
+            return LocalDateTime.parse(date, Constants.WORKFLOW_INSTANCE_DATE_TIME_FORMATTER);
+        } catch (DateTimeParseException e) {
+            try {
+                LocalDate localDate = LocalDate.parse(date, Constants.WORKFLOW_INSTANCE_DATE_FORMATTER);
+                return localDate.atStartOfDay();
+            } catch (DateTimeParseException e1) {
+                throw new WorkflowClientException(String.format("Invalid date for %s. Expected formats: " +
+                        "yyyy-MM-dd | yyyy-MM-dd:HH:mm:ss.SSS", dateType));
+            }
+        }
+    }
+
+    private void putValidatedDateInMap(Map<String, String> filterMap, String key, String value, String operator)
+            throws WorkflowClientException {
+
+        LocalDateTime newDate = parseDateTime(value, key);
+        value = newDate.format(Constants.WORKFLOW_INSTANCE_DATE_TIME_FORMATTER);
+
+        if (Constants.GREATER_THAN_OR_EQUAL_OPERATOR.equals(operator)) {
+            String storeKey = Constants.WORKFLOW_INSTANCE_CREATED_START_DATE_KEY;
+            if (Constants.WORKFLOW_INSTANCE_UPDATED_DATE_KEY.equals(key)) {
+                storeKey = Constants.WORKFLOW_INSTANCE_UPDATED_START_DATE_KEY;
+            }
+            if (filterMap.get(storeKey) == null) {
+                filterMap.put(storeKey, value);
+                return;
+            }
+            LocalDateTime existingDate = LocalDateTime.parse(filterMap.get(storeKey),
+                    Constants.WORKFLOW_INSTANCE_DATE_TIME_FORMATTER);
+            if (newDate.isAfter(existingDate)) {
+                filterMap.put(storeKey, value);
+            }
+        } else if (Constants.LESS_THAN_OR_EQUAL_OPERATOR.equals(operator)) {
+            String storeKey = Constants.WORKFLOW_INSTANCE_CREATED_END_DATE_KEY;
+            if (Constants.WORKFLOW_INSTANCE_UPDATED_DATE_KEY.equals(key)) {
+                storeKey = Constants.WORKFLOW_INSTANCE_UPDATED_END_DATE_KEY;
+            }
+            if (filterMap.get(storeKey) == null) {
+                filterMap.put(storeKey, value);
+                return;
+            }
+            LocalDateTime existingDate = LocalDateTime.parse(filterMap.get(storeKey),
+                    Constants.WORKFLOW_INSTANCE_DATE_TIME_FORMATTER);
+            if (existingDate.isAfter(newDate)) {
+                filterMap.put(storeKey, value);
+            }
+        } else {
+            throw new WorkflowClientException("Only 'ge' & 'le' operator supported for date filtering");
+        }
     }
 }

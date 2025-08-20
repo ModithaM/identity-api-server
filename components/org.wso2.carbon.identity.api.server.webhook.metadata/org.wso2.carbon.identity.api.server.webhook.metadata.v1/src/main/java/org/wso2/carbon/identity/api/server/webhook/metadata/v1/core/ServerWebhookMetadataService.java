@@ -18,14 +18,21 @@
 
 package org.wso2.carbon.identity.api.server.webhook.metadata.v1.core;
 
+import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.identity.api.server.common.ContextLoader;
 import org.wso2.carbon.identity.api.server.webhook.metadata.common.WebhookMetadataServiceHolder;
 import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.Channel;
 import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.Event;
 import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.EventProfile;
 import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.EventProfileMetadata;
+import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.WebhookMetadata;
+import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.WebhookMetadataAdapter;
+import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.WebhookMetadataProperties;
 import org.wso2.carbon.identity.api.server.webhook.metadata.v1.util.WebhookMetadataAPIErrorBuilder;
+import org.wso2.carbon.identity.organization.resource.sharing.policy.management.constant.PolicyEnum;
 import org.wso2.carbon.identity.webhook.metadata.api.exception.WebhookMetadataException;
+import org.wso2.carbon.identity.webhook.metadata.api.model.Adapter;
+import org.wso2.carbon.identity.webhook.metadata.api.model.OrganizationPolicy;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -64,17 +71,41 @@ public class ServerWebhookMetadataService {
     }
 
     /**
-     * Get all event profile names available in the system.
+     * Get Webhook metadata which includes all the event profiles and the active adapter.
      *
-     * @return List of event profile names
+     * @return Webhook metadata containing event profiles and active adapter
      */
-    public List<EventProfileMetadata> getEventProfileNames() {
+    public WebhookMetadata getWebhookMetadata() {
 
         try {
-            return WebhookMetadataServiceHolder.getWebhookMetadataService().getSupportedEventProfiles()
-                    .stream()
+            List<org.wso2.carbon.identity.webhook.metadata.api.model.EventProfile> eventProfiles =
+                    WebhookMetadataServiceHolder.getWebhookMetadataService().getSupportedEventProfiles();
+            List<EventProfileMetadata> eventProfileMetadataList = eventProfiles.stream()
                     .map(this::mapEventProfileMetadata)
                     .collect(Collectors.toList());
+
+            Adapter adapter =
+                    WebhookMetadataServiceHolder.getEventAdapterMetadataService().getCurrentActiveAdapter();
+            WebhookMetadataAdapter webhookMetadataAdapter = mapWebhookMetadataAdapter(adapter);
+
+            WebhookMetadata webhookMetadata = new WebhookMetadata();
+            webhookMetadata.setProfiles(eventProfileMetadataList);
+            webhookMetadata.setAdapter(webhookMetadataAdapter);
+            return webhookMetadata;
+        } catch (WebhookMetadataException e) {
+            throw WebhookMetadataAPIErrorBuilder.buildAPIError(e);
+        }
+    }
+
+    public WebhookMetadata updateWebhookMetadataProperties(
+            WebhookMetadataProperties webhookMetadataProperties) {
+
+        try {
+            WebhookMetadataServiceHolder.getWebhookMetadataService()
+                    .updateWebhookMetadataProperties(mapWebhookMetadataProperties(webhookMetadataProperties),
+                            CarbonContext.getThreadLocalCarbonContext()
+                                    .getTenantDomain());
+            return getWebhookMetadata();
         } catch (WebhookMetadataException e) {
             throw WebhookMetadataAPIErrorBuilder.buildAPIError(e);
         }
@@ -129,5 +160,24 @@ public class ServerWebhookMetadataService {
                         String.format(V1_API_PATH_COMPONENT + WEBHOOK_METADATA_PATH_COMPONENT +
                                 EVENT_PROFILE_PATH_COMPONENT + "/%s", eventProfile.getProfile())).toString());
         return mappedMetadata;
+    }
+
+    private WebhookMetadataAdapter mapWebhookMetadataAdapter(Adapter adapter) {
+
+        WebhookMetadataAdapter webhookMetadataAdapter = new WebhookMetadataAdapter();
+        webhookMetadataAdapter.setName(adapter.getName());
+        webhookMetadataAdapter.setType(adapter.getType().toString());
+        return webhookMetadataAdapter;
+    }
+
+    private org.wso2.carbon.identity.webhook.metadata.api.model.WebhookMetadataProperties mapWebhookMetadataProperties(
+            WebhookMetadataProperties apiProperties) {
+
+        OrganizationPolicy organizationPolicy = new OrganizationPolicy(
+                PolicyEnum.getPolicyByValue(apiProperties.getOrganizationPolicy().getPolicyName().value()));
+
+        return new org.wso2.carbon.identity.webhook.metadata.api.model.WebhookMetadataProperties.Builder()
+                .organizationPolicy(organizationPolicy)
+                .build();
     }
 }

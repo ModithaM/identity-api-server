@@ -16,15 +16,12 @@
  * under the License.
  */
 
-package org.wso2.carbon.identity.api.server.webhook.metadata.v1.model;
+package org.wso2.carbon.identity.api.server.application.management.v1;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
-import java.util.ArrayList;
-import java.util.List;
-import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.EventProfileMetadata;
 import javax.validation.constraints.*;
 
 
@@ -33,38 +30,31 @@ import java.util.Objects;
 import javax.validation.Valid;
 import javax.xml.bind.annotation.*;
 
-public class EventProfileList  {
+public class ApplicationSharedOrgsRequestBody  {
   
-    private List<EventProfileMetadata> profiles = null;
-
+    private String applicationId;
 
     /**
     **/
-    public EventProfileList profiles(List<EventProfileMetadata> profiles) {
+    public ApplicationSharedOrgsRequestBody applicationId(String applicationId) {
 
-        this.profiles = profiles;
+        this.applicationId = applicationId;
         return this;
     }
     
-    @ApiModelProperty(value = "")
-    @JsonProperty("profiles")
+    @ApiModelProperty(required = true, value = "")
+    @JsonProperty("applicationId")
     @Valid
-    public List<EventProfileMetadata> getProfiles() {
-        return profiles;
+    @NotNull(message = "Property applicationId cannot be null.")
+
+    public String getApplicationId() {
+        return applicationId;
     }
-    public void setProfiles(List<EventProfileMetadata> profiles) {
-        this.profiles = profiles;
+    public void setApplicationId(String applicationId) {
+        this.applicationId = applicationId;
     }
 
-    public EventProfileList addProfilesItem(EventProfileMetadata profilesItem) {
-        if (this.profiles == null) {
-            this.profiles = new ArrayList<EventProfileMetadata>();
-        }
-        this.profiles.add(profilesItem);
-        return this;
-    }
 
-    
 
     @Override
     public boolean equals(java.lang.Object o) {
@@ -75,22 +65,22 @@ public class EventProfileList  {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        EventProfileList eventProfileList = (EventProfileList) o;
-        return Objects.equals(this.profiles, eventProfileList.profiles);
+        ApplicationSharedOrgsRequestBody applicationSharedOrgsRequestBody = (ApplicationSharedOrgsRequestBody) o;
+        return Objects.equals(this.applicationId, applicationSharedOrgsRequestBody.applicationId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(profiles);
+        return Objects.hash(applicationId);
     }
 
     @Override
     public String toString() {
 
         StringBuilder sb = new StringBuilder();
-        sb.append("class EventProfileList {\n");
+        sb.append("class ApplicationSharedOrgsRequestBody {\n");
         
-        sb.append("    profiles: ").append(toIndentedString(profiles)).append("\n");
+        sb.append("    applicationId: ").append(toIndentedString(applicationId)).append("\n");
         sb.append("}");
         return sb.toString();
     }

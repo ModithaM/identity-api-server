@@ -22,9 +22,8 @@ import org.wso2.carbon.identity.api.server.webhook.metadata.v1.WebhooksApiServic
 import org.wso2.carbon.identity.api.server.webhook.metadata.v1.core.ServerWebhookMetadataService;
 import org.wso2.carbon.identity.api.server.webhook.metadata.v1.factories.ServerWebhookMetadataServiceFactory;
 import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.EventProfile;
-import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.EventProfileMetadata;
-
-import java.util.List;
+import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.WebhookMetadata;
+import org.wso2.carbon.identity.api.server.webhook.metadata.v1.model.WebhookMetadataProperties;
 
 import javax.ws.rs.core.Response;
 
@@ -47,7 +46,22 @@ public class WebhooksApiServiceImpl implements WebhooksApiService {
 
         ServerWebhookMetadataService webhookMetadataService =
                 ServerWebhookMetadataServiceFactory.getServerWebhookMetadataService();
-        List<EventProfileMetadata> eventProfiles = webhookMetadataService.getEventProfileNames();
-        return Response.ok().entity(eventProfiles).build();
+        WebhookMetadata webhookMetadata = webhookMetadataService.getWebhookMetadata();
+        return Response.ok().entity(webhookMetadata).build();
+    }
+
+    @Override
+    public Response patchWebhookMetadata(WebhookMetadataProperties webhookMetadataProperties) {
+
+        ServerWebhookMetadataService webhookMetadataService =
+                ServerWebhookMetadataServiceFactory.getServerWebhookMetadataService();
+        return Response.ok().entity(webhookMetadataService.updateWebhookMetadataProperties(webhookMetadataProperties))
+                .build();
+    }
+
+    @Override
+    public Response putWebhookMetadataNotAllowed() {
+
+        return Response.status(Response.Status.METHOD_NOT_ALLOWED).build();
     }
 }

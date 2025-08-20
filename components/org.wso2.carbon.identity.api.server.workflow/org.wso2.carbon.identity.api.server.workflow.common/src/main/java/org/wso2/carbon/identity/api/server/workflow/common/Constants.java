@@ -18,6 +18,8 @@
 
 package org.wso2.carbon.identity.api.server.workflow.common;
 
+import java.time.format.DateTimeFormatter;
+
 /**
  * Common constants for workflow API.
  */
@@ -29,11 +31,31 @@ public class Constants {
     public static final String TEMPLATE = "Template";
     public static final String STEP_NAME_DELIMITER = "-";
     public static final String PARAMETER_VALUE_SEPARATOR = ",";
-    public static final String WORKFLOW_IMPLEMENTATION = "Workflowimpl";
-    public static final String WORKFLOW_NAME = "WorkflowName";
     public static final int DEFAULT_OFFSET = 0;
     public static final String WORKFLOW_PATH_COMPONENT = "/workflows";
     public static final String WORKFLOW_ASSOCIATION_PATH_COMPONENT = "workflow-associations";
+
+    /**
+     * Workflow instance related constants.
+     */
+    public static final DateTimeFormatter WORKFLOW_INSTANCE_DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+    public static final DateTimeFormatter WORKFLOW_INSTANCE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    public static final String WORKFLOW_INSTANCE_REQUEST_TYPE_KEY = "requestType";
+    public static final String WORKFLOW_INSTANCE_CREATED_DATE_KEY = "createdAt";
+    public static final String WORKFLOW_INSTANCE_CREATED_START_DATE_KEY = "createdAtStartDate";
+    public static final String WORKFLOW_INSTANCE_CREATED_END_DATE_KEY = "createdAtEndDate";
+    public static final String WORKFLOW_INSTANCE_UPDATED_DATE_KEY = "updatedAt";
+    public static final String WORKFLOW_INSTANCE_UPDATED_START_DATE_KEY = "updatedAtStartDate";
+    public static final String WORKFLOW_INSTANCE_UPDATED_END_DATE_KEY = "updatedAtEndDate";
+    public static final String WORKFLOW_INSTANCE_STATUS_KEY = "status";
+    public static final String WORKFLOW_INSTANCE_OPERATION_TYPE_KEY = "operationType";
+    public static final String WORKFLOW_INSTANCE_MY_TASKS_REQUEST_TYPE = "MY_TASKS";
+    public static final String WORKFLOW_INSTANCE_ALL_TASKS_REQUEST_TYPE = "ALL_TASKS";
+
+    public static final String EQUALS_OPERATOR = "eq";
+    public static final String GREATER_THAN_OR_EQUAL_OPERATOR = "ge";
+    public static final String LESS_THAN_OR_EQUAL_OPERATOR = "le";
 
     private Constants() {
 
@@ -61,13 +83,17 @@ public class Constants {
                 "Encountered an error while adding the workflow association with the name %s."),
         ERROR_CODE_CLIENT_ERROR_UPDATING_ASSOCIATION("51008", "Unable to update workflow association",
                 "Encountered an error while updating the workflow association."),
-        ERROR_CODE_INVALID_PAGINATION_PARAMETER_NEGATIVE_LIMIT("51009", "Invalid pagination parameters.", "'limit' " +
-                "shouldn't be negative."),
-
-
+        ERROR_CODE_INVALID_PAGINATION_PARAMETER_NEGATIVE_LIMIT("51009", "Invalid pagination parameters.",
+                "'limit' shouldn't be negative."),
+        ERROR_CODE_CLIENT_ERROR_WORKFLOW_INSTANCE_NOT_FOUND("51010", "Workflow log not found.",
+                "Unable to find a resource matching the provided workflow log identifier %s."),
+        ERROR_CODE_CLIENT_ERROR_LISTING_WORKFLOW_INSTANCES("51011", "Unable to list existing workflow " +
+                "logs.", "Encountered an error while listing the workflow logs."),
+        ERROR_CODE_CLIENT_ERROR_DELETING_WORKFLOW_INSTANCE("51012", "Unable to delete workflow log.",
+                "Encountered an error while deleting the workflow log identifier %s."),
         // Server Errors starting from 500xx.
         ERROR_CODE_ERROR_LISTING_WORKFLOWS("50020", "Unable to list existing workflows",
-                                                   "Server encountered an error while listing the workflows."),
+                "Server encountered an error while listing the workflows."),
         ERROR_CODE_ERROR_REMOVING_WORKFLOW("50021", "Unable to delete the workflow",
                                                    "Server encountered an error while deleting " +
                                                            "the workflow for the identifier %s."),
@@ -93,7 +119,13 @@ public class Constants {
                                                                 "the workflow association for identifier %s."),
         ERROR_CODE_ERROR_UPDATING_ASSOCIATION("50029", "Unable to update workflow association",
                                                       "Server encountered an error while " +
-                                                              "updating the workflow association.");
+                                                              "updating the workflow association."),
+        ERROR_CODE_ERROR_DELETING_WORKFLOW_INSTANCE("50030", "Unable to delete workflow log.",
+                "Server encountered an error while deleting the workflow log for identifier %s."),
+        ERROR_CODE_ERROR_RETRIEVING_WORKFLOW_INSTANCE("50031", "Unable to retrieve workflow log.",
+                "Server encountered an error while retrieving the workflow log for identifier %s."),
+        ERROR_CODE_ERROR_LISTING_WORKFLOW_INSTANCES("50032", "Unable to list existing workflow logs.",
+                "Server encountered an error while listing the workflow logs.");
 
         private final String code;
         private final String message;

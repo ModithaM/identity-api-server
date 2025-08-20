@@ -28,7 +28,6 @@ import org.wso2.carbon.identity.api.server.webhook.management.v1.model.WebhookSu
 import org.wso2.carbon.identity.api.server.webhook.management.v1.model.WebhookSummary;
 import org.wso2.carbon.identity.api.server.webhook.management.v1.util.WebhookManagementAPIErrorBuilder;
 import org.wso2.carbon.identity.subscription.management.api.model.Subscription;
-import org.wso2.carbon.identity.subscription.management.api.model.SubscriptionStatus;
 import org.wso2.carbon.identity.webhook.management.api.exception.WebhookMgtException;
 import org.wso2.carbon.identity.webhook.management.api.model.Webhook;
 import org.wso2.carbon.identity.webhook.management.api.model.WebhookStatus;
@@ -199,7 +198,6 @@ public class ServerWebhookManagementService {
             subscriptions = webhookRequest.getChannelsSubscribed().stream()
                     .map(channelUri -> Subscription.builder()
                             .channelUri(channelUri)
-                            .status(SubscriptionStatus.SUBSCRIPTION_PENDING)
                             .build())
                     .collect(Collectors.toList());
         }
@@ -250,8 +248,8 @@ public class ServerWebhookManagementService {
 
         WebhookResponse webhookResponse = new WebhookResponse();
         webhookResponse.setId(webhook.getId());
-        webhookResponse.setCreatedAt(String.valueOf(webhook.getCreatedAt()));
-        webhookResponse.setUpdatedAt(String.valueOf(webhook.getUpdatedAt()));
+        webhookResponse.setCreatedAt(webhook.getCreatedAt().toInstant().toString());
+        webhookResponse.setUpdatedAt(webhook.getUpdatedAt().toInstant().toString());
         webhookResponse.setEndpoint(webhook.getEndpoint());
         webhookResponse.setName(webhook.getName());
         WebhookRequestEventProfile eventProfile = new WebhookRequestEventProfile();
@@ -265,8 +263,10 @@ public class ServerWebhookManagementService {
                         webhook.getEventsSubscribed().stream()
                                 .map(subscription -> new WebhookSubscription()
                                         .channelUri(subscription.getChannelUri())
-                                        .status(WebhookSubscription.StatusEnum.fromValue(
-                                                subscription.getStatus().name())))
+                                        .status(subscription.getStatus() != null
+                                                ? WebhookSubscription.StatusEnum.fromValue(
+                                                subscription.getStatus().name())
+                                                : null))
                                 .collect(Collectors.toList())
                 );
             } else {

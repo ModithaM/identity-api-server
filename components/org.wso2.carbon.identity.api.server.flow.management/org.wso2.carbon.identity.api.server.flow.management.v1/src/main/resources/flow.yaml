@@ -3,7 +3,7 @@ info:
   description: >
     This document specifies a **Flow Composer RESTful API** for **WSO2
     Identity Server**.
-  version: '2'
+  version: '1.0'
   title: WSO2 Identity Server - Flow Management Rest API
   termsOfService: http://swagger.io/terms/
   contact:
@@ -120,6 +120,296 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /flow/meta:
+    get:
+      summary: Retrieve metadata related to a flow type
+      operationId: getFlowMeta
+      tags:
+        - Flow Composer
+      parameters:
+        - in: query
+          name: flowType
+          required: true
+          schema:
+            type: string
+            enum: [SELF_REGISTRATION, PASSWORD_RECOVERY, ASK_PASSWORD]
+          description: Type of the flow to get metadata for
+      responses:
+        '200':
+          description: Successfully retrieved flow metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowMetaResponse'
+        '400':
+          description: Invalid flow type specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Metadata for specified flow type not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /flow/configs:
+    get:
+      summary: Retrieve flow management configuration
+      operationId: getFlowConfigs
+      tags:
+        - Flow Configuration
+      responses:
+        '200':
+          description: Successfully retrieved flow configurations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FlowConfig'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /flow/config:
+    get:
+      summary: Retrieve metadata related to a flow type
+      operationId: getFlowConfigForFlow
+      tags:
+        - Flow Configuration
+      parameters:
+        - in: query
+          name: flowType
+          required: true
+          schema:
+            type: string
+            enum: [SELF_REGISTRATION, PASSWORD_RECOVERY, ASK_PASSWORD]
+          description: Type of the flow to get configurations for
+      responses:
+        '200':
+          description: Successfully retrieved flow configurations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowConfig'
+        '400':
+          description: Invalid flow type specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      summary: Update the flow configuration
+      operationId: updateFlowConfig
+      tags:
+        - Flow Configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlowConfigPatchModel'
+      responses:
+        '200':
+          description: Flow successfully updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowConfig'
+        '400':
+          description: Invalid request body or unsupported flow type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Flow type not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Encountered a server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /flow/generate:
+    post:
+      summary: Generate a flow
+      operationId: generateFlow
+      tags:
+        - Generate Flow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlowGenerateRequest'
+      responses:
+        '200':
+          description: Flow generation request successfully submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowGenerateResponse'
+        '400':
+          description: Invalid flow type specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /flow/status:
+    get:
+      summary: Retrieve flow generation status
+      operationId: getFlowGenerationStatus
+      tags:
+        - Generate Flow
+      parameters:
+        - in: query
+          name: operationId
+          required: true
+          schema:
+            type: string
+          description: Operation id to get the generation status
+      responses:
+        '200':
+          description: Successfully retrieved the generation status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowGenerateStatus'
+        '400':
+          description: Invalid operation specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Encountered a server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /flow/result:
+    get:
+      summary: Retrieve flow generation result
+      operationId: getFlowGenerationResult
+      tags:
+        - Generate Flow
+      parameters:
+        - in: query
+          name: operationId
+          required: true
+          schema:
+            type: string
+          description: Operation id to get the generation result
+      responses:
+        '200':
+          description: Successfully retrieved the generation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowGenerateResult'
+        '400':
+          description: Invalid operation specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Encountered a server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
   schemas:
     FlowRequest:
@@ -132,11 +422,70 @@ components:
         flowType:
           type: string
           description: Type of the flow being updated
-          example: SELF_REGISTRATION
+          example: REGISTRATION
         steps:
           type: array
           items:
             $ref: '#/components/schemas/Step'
+
+    FlowGenerateRequest:
+      type: object
+      description: Request payload for generating a flow
+      required:
+        - flowType
+      properties:
+        flowType:
+          type: string
+          description: Type of the flow being updated
+          example: REGISTRATION
+        userQuery:
+          type: string
+          description: User query to generate the flow
+          example: Generate a registration flow with basic details and passkey
+
+    FlowGenerateResponse:
+      type: object
+      description: Response for generating a flow
+      properties:
+        operationId:
+          type: string
+          description: Id for the submitted generation operation
+          example: 2dc32cd4-3cde-4a77-bf95-af55a6738b92
+
+    FlowGenerateStatus:
+      type: object
+      description: Status response for generating a flow
+      properties:
+        optimizingQuery:
+          type: boolean
+          example: true
+        fetchingSamples:
+          type: boolean
+          example: true
+        generatingFlow:
+          type: boolean
+          example: true
+        completed:
+          type: boolean
+          example: true
+
+    FlowGenerateResult:
+      type: object
+      description: Result response for generating a flow
+      properties:
+        status:
+          type: string
+          example: SUCCESS
+        data:
+          type: object
+          properties:
+            steps:
+              type: array
+              items:
+                $ref: '#/components/schemas/Step'
+            error:
+              type: string
+              example: Error occurred while generating the flow
 
     FlowResponse:
       type: object
@@ -146,6 +495,104 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Step'
+
+    FlowMetaResponse:
+      type: object
+      description: General metadata for a flow type
+      properties:
+        flowType:
+          type: string
+          example: PASSWORD_RECOVERY
+        supportedExecutors:
+          type: array
+          items:
+            type: string
+            example: SMSOTPExecutor
+        connectorConfigs:
+          type: object
+        attributeProfile:
+          type: string
+          example: End-User-Profile
+        attributeMetadata:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttributeMetadata'
+        executorConnections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutorConnections'
+
+    ExecutorConnections:
+      type: object
+      description: Applicable connections for a given executor
+      properties:
+        executorName:
+          type: string
+          description: Name of the executor
+          example: OIDCExecutor
+        connections:
+          type: array
+          items:
+            type: string
+            example: IdpName
+
+    AttributeMetadata:
+      type: object
+      description: Attribute metadata
+      properties:
+        name:
+          type: string
+          example: Username
+        claimURI:
+          type: string
+          example: http://wso2.org/claims/username
+        required:
+          type: boolean
+          example: true
+        readOnly:
+          type: boolean
+          example: true
+        validators:
+          type: array
+          items:
+            type: string
+            example: AlphanumericValidator
+
+    FlowConfig:
+      type: object
+      description: Flow configurations for a flow type
+      properties:
+        flowType:
+          type: string
+          description: Flow type
+          example: REGISTRATION
+        isEnabled:
+          type: boolean
+          description: Indicate whether the orchestration is enabled for the flow
+          example: true
+        isAutoLoginEnabled:
+          type: boolean
+          description: Indicate whether the auto login is enabled for the flow
+          example: true
+
+    FlowConfigPatchModel:
+      type: object
+      description: Patch model for configurations of a flow type
+      required:
+        - flowType
+      properties:
+        flowType:
+          type: string
+          description: Flow type
+          example: REGISTRATION
+        isEnabled:
+          type: boolean
+          description: Indicate whether the orchestration is enabled for the flow
+          example: true
+        isAutoLoginEnabled:
+          type: boolean
+          description: Indicate whether the auto login is enabled for the flow
+          example: true
 
     Step:
       type: object
