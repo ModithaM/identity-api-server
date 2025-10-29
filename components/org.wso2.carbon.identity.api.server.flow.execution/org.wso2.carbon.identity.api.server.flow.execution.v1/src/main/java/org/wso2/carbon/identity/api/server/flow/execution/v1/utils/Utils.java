@@ -25,13 +25,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.api.server.common.error.APIError;
-import org.wso2.carbon.identity.api.server.common.error.ErrorDTO;
 import org.wso2.carbon.identity.api.server.flow.execution.common.FlowExecutionServiceHolder;
 import org.wso2.carbon.identity.api.server.flow.execution.v1.Component;
 import org.wso2.carbon.identity.api.server.flow.execution.v1.Data;
 import org.wso2.carbon.identity.api.server.flow.execution.v1.FlowExecutionRequest;
 import org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants;
-import org.wso2.carbon.identity.application.common.model.Property;
+import org.wso2.carbon.identity.api.server.flow.execution.v1.model.FlowExecutionErrorDTO;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.flow.execution.engine.exception.FlowEngineClientException;
 import org.wso2.carbon.identity.flow.execution.engine.exception.FlowEngineException;
@@ -41,9 +40,8 @@ import org.wso2.carbon.identity.flow.mgt.exception.FlowMgtFrameworkException;
 import org.wso2.carbon.identity.flow.mgt.model.ComponentDTO;
 import org.wso2.carbon.identity.flow.mgt.model.DataDTO;
 import org.wso2.carbon.identity.flow.mgt.model.FlowConfigDTO;
-import org.wso2.carbon.identity.governance.IdentityGovernanceException;
-import org.wso2.carbon.identity.governance.IdentityGovernanceService;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -51,26 +49,16 @@ import java.util.stream.Collectors;
 import javax.ws.rs.core.Response;
 
 import static org.wso2.carbon.identity.api.server.common.Constants.ERROR_CODE_DELIMITER;
-import static org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants.DYNAMIC_REGISTRATION_PORTAL_ENABLED;
-import static org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants.ErrorMessage.ERROR_CODE_DYNAMIC_REGISTRATION_PORTAL_DISABLED;
 import static org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants.ErrorMessage.ERROR_CODE_FLOW_DISABLED;
 import static org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants.ErrorMessage.ERROR_CODE_GET_FLOW_CONFIG;
-import static org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants.ErrorMessage.ERROR_CODE_GET_GOVERNANCE_CONFIG;
 import static org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants.ErrorMessage.ERROR_CODE_INVALID_FLOW_TYPE;
-import static org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants.ErrorMessage.ERROR_CODE_SELF_REGISTRATION_DISABLED;
-import static org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants.SELF_REGISTRATION_ENABLED;
-import static org.wso2.carbon.identity.api.server.flow.execution.v1.constants.FlowExecutionEndpointConstants.SHOW_USERNAME_UNAVAILABILITY;
-import static org.wso2.carbon.identity.flow.execution.engine.Constants.ErrorMessages.ERROR_CODE_INVALID_USER_INPUT;
-import static org.wso2.carbon.identity.flow.execution.engine.Constants.ErrorMessages.ERROR_CODE_USERNAME_ALREADY_EXISTS;
-import static org.wso2.carbon.identity.flow.mgt.Constants.FlowTypes.INVITED_USER_REGISTRATION;
-import static org.wso2.carbon.identity.flow.mgt.Constants.FlowTypes.PASSWORD_RECOVERY;
-import static org.wso2.carbon.identity.flow.mgt.Constants.FlowTypes.REGISTRATION;
 
 /**
  * Utility class for flow execution API.
  */
 public class Utils {
 
+    private static final String RESEND = "RESEND";
     private static final Log LOG = LogFactory.getLog(Utils.class);
 
     private Utils() {
@@ -87,9 +75,9 @@ public class Utils {
      * @return APIError object.
      */
     public static APIError handleException(Response.Status status, String errorCode,
-                                           String message, String description) {
+                                           String message, String description, String flowType) {
 
-        return new APIError(status, getError(errorCode, message, description));
+        return new APIError(status, getError(errorCode, message, description, flowType));
     }
 
     /**
@@ -110,7 +98,7 @@ public class Utils {
         String errorCode = e.getErrorCode();
         errorCode = errorCode.contains(ERROR_CODE_DELIMITER) ? errorCode :
                 FlowExecutionEndpointConstants.REGISTRATION_FLOW_PREFIX + errorCode;
-        return handleException(status, errorCode, e.getMessage(), e.getDescription());
+        return handleException(status, errorCode, e.getMessage(), e.getDescription(), e.getFlowType());
     }
 
     /**
@@ -127,19 +115,12 @@ public class Utils {
         if (e instanceof FlowEngineClientException) {
             LOG.debug(e.getMessage(), e);
             status = Response.Status.BAD_REQUEST;
-            if (ERROR_CODE_USERNAME_ALREADY_EXISTS.getCode().equals(errorCode) &&
-                    !isShowUsernameUnavailabilityEnabled(tenantDomain)) {
-                return handleException(status, ERROR_CODE_INVALID_USER_INPUT.getCode(),
-                        ERROR_CODE_INVALID_USER_INPUT.getMessage(),
-                        ERROR_CODE_INVALID_USER_INPUT.getDescription());
-            }
         } else {
             LOG.error(e.getMessage(), e);
         }
-        // handle NPE when confirmation code expired
         errorCode = errorCode.contains(ERROR_CODE_DELIMITER) ? errorCode :
                 FlowExecutionEndpointConstants.REGISTRATION_FLOW_PREFIX + errorCode;
-        return handleException(status, errorCode, e.getMessage(), e.getDescription());
+        return handleException(status, errorCode, e.getMessage(), e.getDescription(), e.getFlowType());
     }
 
     /**
@@ -150,90 +131,15 @@ public class Utils {
      * @param errorDescription Error description.
      * @return A generic error with the specified details.
      */
-    public static ErrorDTO getError(String errorCode, String errorMessage, String errorDescription) {
+    public static FlowExecutionErrorDTO getError(String errorCode, String errorMessage, String errorDescription,
+                                                 String flowType) {
 
-        ErrorDTO error = new ErrorDTO();
+        FlowExecutionErrorDTO error = new FlowExecutionErrorDTO();
         error.setCode(errorCode);
         error.setMessage(errorMessage);
         error.setDescription(errorDescription);
+        error.setFlowType(flowType);
         return error;
-    }
-
-    /**
-     * Checks whether self registration is enabled.
-     *
-     * @param tenantDomain Tenant domain.
-     */
-    public static void isSelfRegistrationEnabled(String tenantDomain) {
-
-        try {
-            IdentityGovernanceService identityGovernanceService =
-                    FlowExecutionServiceHolder.getIdentityGovernanceService();
-            Property[] connectorConfigs = identityGovernanceService.getConfiguration(
-                    new String[]{SELF_REGISTRATION_ENABLED}, tenantDomain);
-            if (!Boolean.parseBoolean(connectorConfigs[0].getValue())) {
-                throw handleFlowException(new FlowEngineClientException(
-                        ERROR_CODE_SELF_REGISTRATION_DISABLED.getCode(),
-                        ERROR_CODE_SELF_REGISTRATION_DISABLED.getMessage(),
-                        ERROR_CODE_SELF_REGISTRATION_DISABLED.getDescription()));
-            }
-        } catch (IdentityGovernanceException e) {
-            throw handleFlowException(new FlowEngineServerException(
-                    ERROR_CODE_GET_GOVERNANCE_CONFIG.getCode(),
-                    ERROR_CODE_GET_GOVERNANCE_CONFIG.getMessage(),
-                    ERROR_CODE_GET_GOVERNANCE_CONFIG.getDescription(), e));
-        }
-    }
-
-    /**
-     * Checks whether the dynamic registration portal is enabled.
-     *
-     * @param tenantDomain Tenant domain.
-     */
-    public static void isDynamicRegistrationPortalEnabled(String tenantDomain) {
-
-        try {
-            IdentityGovernanceService identityGovernanceService =
-                    FlowExecutionServiceHolder.getIdentityGovernanceService();
-            Property[] connectorConfigs = identityGovernanceService.getConfiguration(
-                    new String[]{DYNAMIC_REGISTRATION_PORTAL_ENABLED}, tenantDomain);
-            boolean isDynamicRegistrationPortalEnabled = Boolean.parseBoolean(connectorConfigs[0].getValue());
-
-            boolean isFlowOrchestrationEnabled = isOrchestrationEnabled(REGISTRATION.name(), tenantDomain);
-
-            if (!isDynamicRegistrationPortalEnabled && !isFlowOrchestrationEnabled) {
-                throw handleFlowException(new FlowEngineClientException(
-                        ERROR_CODE_DYNAMIC_REGISTRATION_PORTAL_DISABLED.getCode(),
-                        ERROR_CODE_DYNAMIC_REGISTRATION_PORTAL_DISABLED.getMessage(),
-                        ERROR_CODE_DYNAMIC_REGISTRATION_PORTAL_DISABLED.getDescription()));
-            }
-        } catch (IdentityGovernanceException e) {
-            throw handleFlowException(new FlowEngineServerException(
-                    ERROR_CODE_GET_GOVERNANCE_CONFIG.getCode(),
-                    ERROR_CODE_GET_GOVERNANCE_CONFIG.getMessage(),
-                    ERROR_CODE_GET_GOVERNANCE_CONFIG.getDescription(), e));
-        }
-    }
-
-    /**
-     * Checks whether the show username unavailability is enabled.
-     *
-     * @param tenantDomain Tenant domain.
-     */
-    public static boolean isShowUsernameUnavailabilityEnabled(String tenantDomain) {
-
-        try {
-            IdentityGovernanceService identityGovernanceService =
-                    FlowExecutionServiceHolder.getIdentityGovernanceService();
-            Property[] connectorConfigs = identityGovernanceService.getConfiguration(
-                    new String[]{SHOW_USERNAME_UNAVAILABILITY}, tenantDomain);
-            return Boolean.parseBoolean(connectorConfigs[0].getValue());
-        } catch (IdentityGovernanceException e) {
-            throw handleFlowException(new FlowEngineServerException(
-                    ERROR_CODE_GET_GOVERNANCE_CONFIG.getCode(),
-                    ERROR_CODE_GET_GOVERNANCE_CONFIG.getMessage(),
-                    ERROR_CODE_GET_GOVERNANCE_CONFIG.getDescription(), e));
-        }
     }
 
     /**
@@ -261,10 +167,18 @@ public class Utils {
 
         switch (type) {
             case Constants.StepTypes.VIEW:
-                return data.components(dataDTO.getComponents().stream()
-                        .map(Utils::convertToComponent)
-                        .collect(Collectors.toList()));
+                if (dataDTO.getComponents() != null && !dataDTO.getComponents().isEmpty()) {
+                    return data.components(dataDTO.getComponents().stream()
+                            .map(Utils::convertToComponent)
+                            .collect(Collectors.toList()));
+                }
+                return data.components(new ArrayList<>());
             case Constants.StepTypes.REDIRECTION:
+                if (dataDTO.getComponents() != null && !dataDTO.getComponents().isEmpty()) {
+                    data.components(dataDTO.getComponents().stream()
+                            .map(Utils::convertToComponent)
+                            .collect(Collectors.toList()));
+                }
                 return data.redirectURL(dataDTO.getRedirectURL());
             case Constants.StepTypes.WEBAUTHN:
                 return data.webAuthnData(dataDTO.getWebAuthnData());
@@ -290,18 +204,13 @@ public class Utils {
         }
 
         String tenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantDomain();
-        if (REGISTRATION.getType().equals(flowType)) {
-            Utils.isDynamicRegistrationPortalEnabled(tenantDomain);
-        } else if (PASSWORD_RECOVERY.getType().equals(flowType) ||
-                INVITED_USER_REGISTRATION.getType().equals(flowType)) {
-            boolean isOrchestrationEnabled = Utils.isOrchestrationEnabled(flowType, tenantDomain);
-            if (!isOrchestrationEnabled) {
-                throw Utils.handleFlowException(new FlowEngineClientException(
-                        ERROR_CODE_FLOW_DISABLED.getCode(),
-                        ERROR_CODE_FLOW_DISABLED.getMessage(),
-                        String.format(ERROR_CODE_FLOW_DISABLED.getDescription(), flowType)));
-            }
+        if (!Utils.isOrchestrationEnabled(flowType, tenantDomain)) {
+            throw Utils.handleFlowException(new FlowEngineClientException(
+                    ERROR_CODE_FLOW_DISABLED.getCode(),
+                    ERROR_CODE_FLOW_DISABLED.getMessage(),
+                    String.format(ERROR_CODE_FLOW_DISABLED.getDescription(), flowType)));
         }
+
     }
 
     /**
@@ -331,7 +240,7 @@ public class Utils {
             return null;
         }
 
-        return new Component()
+        Component component = new Component()
                 .id(componentDTO.getId())
                 .type(componentDTO.getType())
                 .variant(componentDTO.getVariant())
@@ -339,6 +248,22 @@ public class Utils {
                 .components(componentDTO.getComponents() != null ? componentDTO.getComponents().stream()
                         .map(Utils::convertToComponent)
                         .collect(Collectors.toList()) : null);
+        if (Constants.ComponentTypes.BUTTON.equals(componentDTO.getType())) {
+            component.actionId(componentDTO.getId());
+        } else if (Constants.ComponentTypes.FORM.equals(componentDTO.getType())
+                && componentDTO.getComponents() != null) {
+            // Set the action id of the button component to the RESEND components inside the form.
+            String formActionId = componentDTO.getComponents().stream()
+                    .filter(c -> Constants.ComponentTypes.BUTTON.equals(c.getType()))
+                    .findFirst()
+                    .map(ComponentDTO::getId)
+                    .orElse(null);
+            if (StringUtils.isNotBlank(formActionId)) {
+                component.getComponents().stream().filter(c -> RESEND
+                        .equals(c.getType())).forEach(c -> c.setActionId(formActionId));
+            }
+        }
+        return component;
     }
 
     private static Map<String, Object> convertToMap(Object map) {

@@ -75,7 +75,27 @@ public class FlowEndpointConstants {
 
         ERROR_CODE_GET_SUPPORTED_CLAIMS("10008",
                 "Failed to retrieve supported claims.",
-                "An error occurred while reading supported claim metadata for the given attribute profile.");
+                "An error occurred while reading supported claim metadata for the given attribute profile."),
+
+        ERROR_CODE_INVALID_FLOW_COMPLETION_CONFIG("10009",
+                "Invalid flow completion config value provided.",
+                "The provided value for flow completion config %s is not valid."),
+
+        ERROR_CODE_UNSUPPORTED_FLOW_COMPLETION_CONFIG("10010",
+                "Unsupported flow completion config used in the flow.",
+                "The provided flow completion config %s is not supported for the flow type %s."),
+
+        ERROR_CODE_UNSUPPORTED_PROPERTY("10011",
+                "Invalid property value.",
+                "Property %s cannot be %s."),
+
+        ERROR_CODE_EMPTY_STEPS("10012",
+                "Empty steps in the flow.",
+                "The steps in the flow cannot be empty."),
+
+        ERROR_CODE_REQUIRED_EXECUTOR_MISSING("10013",
+                "Required executor is missing in the flow.",
+                "The flow must contain the required executors.");
 
         private final String code;
         private final String message;
@@ -131,8 +151,8 @@ public class FlowEndpointConstants {
         public static final String EMAIL_OTP_EXECUTOR = "EmailOTPExecutor";
         public static final String SMS_OTP_EXECUTOR = "SMSOTPExecutor";
         public static final String MAGIC_LINK_EXECUTOR = "MagicLinkExecutor";
-        public static final String PASSWORD_ONBOARD_EXECUTOR = "PasswordOnboardExecutor";
         public static final String CONFIRMATION_CODE_VALIDATION_EXECUTOR = "ConfirmationCodeValidationExecutor";
+        public static final String USER_PROVISIONING_EXECUTOR = "UserProvisioningExecutor";
     }
 
     /**
@@ -156,5 +176,10 @@ public class FlowEndpointConstants {
         public static final String STATUS_FAILED = "FAILED";
         public static final String STEPS = "steps";
         public static final String ERROR = "error";
+        public static final String END = "END";
+        public static final String NEXT = "next";
+        public static final String EMPTY = "empty";
+        public static final String NULL = "null";
+        public static final String FORM = "FORM";
     }
 }

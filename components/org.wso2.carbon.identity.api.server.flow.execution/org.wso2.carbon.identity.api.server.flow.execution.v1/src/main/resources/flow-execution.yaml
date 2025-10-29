@@ -77,7 +77,7 @@ components:
         actionId:
           type: string
           description: Action identifier
-          example: dnd-component-01afc2d2-f7b8-46db-95a9-c17336e7a1c6
+          example: button_40f64
         inputs:
           type: object
           description: Input values for the execution step
@@ -89,6 +89,7 @@ components:
       type: object
       required:
         - flowId
+        - flowType
         - flowStatus
         - type
       properties:
@@ -96,6 +97,10 @@ components:
           type: string
           description: Unique identifier for the flow execution
           example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        flowType:
+          type: string
+          description: Unique identifier to identify the flow type
+          example: REGISTRATION
         flowStatus:
           type: string
           example: INCOMPLETE
@@ -137,7 +142,11 @@ components:
         id:
           type: string
           description: Unique identifier of the component
-          example: dnd-component-210e95c0-c580-40b0-9646-7054bb340f64
+          example: button_40f64
+        actionId:
+          type: string
+          description: Action identifier
+          example: button_40f64
         type:
           type: string
           description: Specific component type (e.g., INPUT, BUTTON)

@@ -21,9 +21,11 @@ package org.wso2.carbon.identity.api.server.flow.management.v1.utils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.api.server.common.error.APIError;
 import org.wso2.carbon.identity.api.server.common.error.ErrorDTO;
@@ -39,6 +41,7 @@ import org.wso2.carbon.identity.api.server.flow.management.v1.Size;
 import org.wso2.carbon.identity.api.server.flow.management.v1.Step;
 import org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants;
 import org.wso2.carbon.identity.api.server.flow.management.v1.response.handlers.AbstractMetaResponseHandler;
+import org.wso2.carbon.identity.api.server.flow.management.v1.response.handlers.PasswordRecoveryFlowMetaHandler;
 import org.wso2.carbon.identity.application.common.model.Property;
 import org.wso2.carbon.identity.core.util.LambdaExceptionUtils;
 import org.wso2.carbon.identity.flow.mgt.Constants;
@@ -53,11 +56,15 @@ import org.wso2.carbon.identity.flow.mgt.model.StepDTO;
 import org.wso2.carbon.identity.governance.IdentityGovernanceException;
 import org.wso2.carbon.identity.governance.IdentityGovernanceService;
 import org.wso2.carbon.identity.multi.attribute.login.constants.MultiAttributeLoginConstants;
+import org.wso2.carbon.identity.workflow.mgt.WorkflowManagementService;
+import org.wso2.carbon.identity.workflow.mgt.dto.Association;
+import org.wso2.carbon.identity.workflow.mgt.exception.WorkflowException;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +77,11 @@ import static org.wso2.carbon.identity.api.server.common.Constants.ERROR_CODE_DE
 import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.ErrorMessages.ERROR_CODE_DUPLICATE_COMPONENT_ID;
 import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.ErrorMessages.ERROR_CODE_GET_GOVERNANCE_CONFIG;
 import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_EXECUTOR;
+import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.FlowGeneration.EMPTY;
+import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.FlowGeneration.END;
+import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.FlowGeneration.FORM;
+import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.FlowGeneration.NEXT;
+import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.FlowGeneration.NULL;
 import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.USERNAME_IDENTIFIER;
 import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants.USER_IDENTIFIER;
 
@@ -79,6 +91,14 @@ import static org.wso2.carbon.identity.api.server.flow.management.v1.constants.F
 public class Utils {
 
     private static final Log LOG = LogFactory.getLog(Utils.class);
+    private static final String EXECUTOR = "EXECUTOR";
+
+    private static final Map<Constants.FlowTypes, String> WORKFLOW_FILTERS = new HashMap<>();
+
+    static {
+        WORKFLOW_FILTERS.put(Constants.FlowTypes.REGISTRATION, "operation eq SELF_REGISTER_USER");
+        WORKFLOW_FILTERS.put(Constants.FlowTypes.INVITED_USER_REGISTRATION, "operation eq ADD_USER");
+    }
 
     private Utils() {
 
@@ -118,6 +138,23 @@ public class Utils {
         errorCode = errorCode.contains(ERROR_CODE_DELIMITER) ? errorCode :
                 FlowEndpointConstants.FLOW_PREFIX + errorCode;
         return handleException(status, errorCode, e.getMessage(), e.getDescription());
+    }
+
+    /**
+     * Handles exceptions and returns an APIError object.
+     *
+     * @param e FlowMgtFrameworkException object.
+     * @param data Data to be added to the description.
+     * @return APIError object.
+     */
+    public static APIError handleFlowMgtException(FlowMgtFrameworkException e, Object ... data) {
+
+        String description = e.getDescription();
+        if (ArrayUtils.isNotEmpty(data)) {
+            description = String.format(description, data);
+        }
+        e.setDescription(description);
+        return handleFlowMgtException(e);
     }
 
     /**
@@ -355,6 +392,14 @@ public class Utils {
             if (step.getData() != null && step.getData().getComponents() != null) {
                 traverseComponents(step.getData().getComponents(), executors, identifiers, ids);
             }
+
+            if (step.getData() != null && step.getData().getAction() != null
+                    && EXECUTOR.equals(step.getData().getAction().getType())) {
+                Executor executor = step.getData().getAction().getExecutor();
+                if (executor != null && executor.getName() != null) {
+                    executors.add(executor.getName());
+                }
+            }
         }
     }
 
@@ -372,7 +417,7 @@ public class Utils {
             }
 
             if (executors != null && component.getAction() != null
-                    && "EXECUTOR".equals(component.getAction().getType())) {
+                    && EXECUTOR.equals(component.getAction().getType())) {
                 Executor executor = component.getAction().getExecutor();
                 if (executor != null && executor.getName() != null) {
                     executors.add(executor.getName());
@@ -456,6 +501,18 @@ public class Utils {
                     ERROR_CODE_UNSUPPORTED_EXECUTOR.getMessage(),
                     ERROR_CODE_UNSUPPORTED_EXECUTOR.getDescription()));
         }
+
+        // For password recovery flow, ensure at least one of the following executors is present.
+        if (metaResponseHandler instanceof PasswordRecoveryFlowMetaHandler) {
+            if (!executors.contains(FlowEndpointConstants.Executors.EMAIL_OTP_EXECUTOR) &&
+                    !executors.contains(FlowEndpointConstants.Executors.SMS_OTP_EXECUTOR) &&
+                    !executors.contains(FlowEndpointConstants.Executors.MAGIC_LINK_EXECUTOR)) {
+                throw handleFlowMgtException(new FlowMgtClientException(
+                        FlowEndpointConstants.ErrorMessages.ERROR_CODE_REQUIRED_EXECUTOR_MISSING.getCode(),
+                        FlowEndpointConstants.ErrorMessages.ERROR_CODE_REQUIRED_EXECUTOR_MISSING.getMessage(),
+                        FlowEndpointConstants.ErrorMessages.ERROR_CODE_REQUIRED_EXECUTOR_MISSING.getDescription()));
+            }
+        }
     }
 
     public static FlowConfig convertToFlowConfig(FlowConfigDTO flowConfig) {
@@ -463,8 +520,7 @@ public class Utils {
         FlowConfig config = new FlowConfig();
         config.setFlowType(flowConfig.getFlowType());
         config.setIsEnabled(flowConfig.getIsEnabled() != null && flowConfig.getIsEnabled());
-        config.setIsAutoLoginEnabled(flowConfig.getIsAutoLoginEnabled() != null &&
-                flowConfig.getIsAutoLoginEnabled());
+        config.setFlowCompletionConfigs(flowConfig.getAllFlowCompletionConfigs());
         return config;
     }
 
@@ -473,8 +529,7 @@ public class Utils {
         FlowConfigDTO config = new FlowConfigDTO();
         config.setFlowType(flowConfig.getFlowType());
         config.setIsEnabled(flowConfig.getIsEnabled() != null && flowConfig.getIsEnabled());
-        config.setIsAutoLoginEnabled(flowConfig.getIsAutoLoginEnabled() != null &&
-                flowConfig.getIsAutoLoginEnabled());
+        config.addAllFlowCompletionConfigs(flowConfig.getFlowCompletionConfigs());
         return config;
     }
 
@@ -487,5 +542,152 @@ public class Utils {
                     FlowEndpointConstants.ErrorMessages.ERROR_CODE_INVALID_FLOW_TYPE.getMessage(),
                     FlowEndpointConstants.ErrorMessages.ERROR_CODE_INVALID_FLOW_TYPE.getDescription()));
         }
+    }
+
+    /**
+     * Get the list of supported properties for a given flow type.
+     *
+     * @param flowType The flow type.
+     * @return List of supported properties.
+     */
+    public static List<String> getSupportedFlowCompletionConfig(String flowType) {
+
+        Constants.FlowTypes requestedFlowType  = Constants.FlowTypes.valueOf(flowType);
+        List<Constants.FlowCompletionConfig> supportedFlags  = requestedFlowType.getSupportedFlowCompletionConfigs();
+        return supportedFlags.stream().map(Constants.FlowCompletionConfig::getConfig).collect(Collectors.toList());
+    }
+
+    /**
+     * Validate the flow completion config and its value.
+     *
+     * @param flowCompletionConfig The flow completion config to validate.
+     * @param value                The value of the flow completion config.
+     * @param supportedProperties  List of supported properties for the flow type.
+     * @param flowType             The flow type.
+     * @throws FlowMgtClientException If the flow completion config or its value is invalid.
+     */
+    public static void validateFlowCompletionConfig(String flowCompletionConfig, String value ,
+                                                    List<String> supportedProperties, String flowType)
+            throws FlowMgtClientException {
+
+        if (StringUtils.isBlank(flowCompletionConfig) || StringUtils.isBlank(value)) {
+
+            throw Utils.handleFlowMgtException(new FlowMgtClientException(
+                    FlowEndpointConstants.ErrorMessages.ERROR_CODE_INVALID_FLOW_COMPLETION_CONFIG.getCode(),
+                    FlowEndpointConstants.ErrorMessages.ERROR_CODE_INVALID_FLOW_COMPLETION_CONFIG.getMessage(),
+                    FlowEndpointConstants.ErrorMessages.ERROR_CODE_INVALID_FLOW_COMPLETION_CONFIG.getDescription()),
+                    flowCompletionConfig
+            );
+        }
+        if (!supportedProperties.contains(flowCompletionConfig)) {
+            throw Utils.handleFlowMgtException(new FlowMgtClientException(
+                    FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_FLOW_COMPLETION_CONFIG.getCode(),
+                    FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_FLOW_COMPLETION_CONFIG.getMessage(),
+                    FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_FLOW_COMPLETION_CONFIG.getDescription()),
+                    flowCompletionConfig, flowType
+            );
+        }
+    }
+
+    /**
+     * Validate the connectivity of nodes in the flow graph.
+     *
+     * @param steps List of steps to validate.
+     */
+    public static void validateNodeConnectivity(List<Step> steps) {
+
+        if (CollectionUtils.isEmpty(steps)) {
+            throw Utils.handleFlowMgtException(new FlowMgtClientException(
+                    FlowEndpointConstants.ErrorMessages.ERROR_CODE_EMPTY_STEPS.getCode(),
+                    FlowEndpointConstants.ErrorMessages.ERROR_CODE_EMPTY_STEPS.getMessage(),
+                    FlowEndpointConstants.ErrorMessages.ERROR_CODE_EMPTY_STEPS.getDescription()));
+        }
+        for (Step step : steps) {
+            validateNextNodeReference(step);
+        }
+    }
+
+    /**
+     * Validate the next node reference of a step.
+     *
+     * @param step Step to validate.
+     */
+    public static void validateNextNodeReference(Step step) {
+
+        //If the step is not END, and contains action, then the next must not be null.
+        if (!END.equals(step.getType())) {
+            if (step.getData() != null && step.getData().getAction() != null &&
+                    StringUtils.isBlank(step.getData().getAction().getNext())) {
+                throw Utils.handleFlowMgtException(new FlowMgtClientException(
+                                FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_PROPERTY.getCode(),
+                                FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_PROPERTY.getMessage(),
+                                FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_PROPERTY.getDescription()),
+                        NEXT, step.getData().getAction().getNext() == null ? NULL : EMPTY);
+            }
+            validateNextNodeReference(step.getData().getComponents());
+        }
+    }
+
+    /**
+     * Validate the next node reference of components recursively.
+     *
+     * @param components List of components to validate.
+     */
+    public static void validateNextNodeReference(List<Component> components) {
+
+        if (!CollectionUtils.isEmpty(components)) {
+            for (Component component : components) {
+                validateNextNodeReference(component);
+            }
+        }
+    }
+
+    /**
+     * Validate the next node reference of a component recursively.
+     *
+     * @param component Component to validate.
+     */
+    public static void validateNextNodeReference(Component component) {
+
+        if (component.getAction() != null && StringUtils.isBlank(component.getAction().getNext())) {
+            throw Utils.handleFlowMgtException(new FlowMgtClientException(
+                            FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_PROPERTY.getCode(),
+                            FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_PROPERTY.getMessage(),
+                            FlowEndpointConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_PROPERTY.getDescription()),
+                    NEXT, component.getAction().getNext() == null ? NULL : EMPTY);
+        }
+
+        // If the component is of type FORM, has its child components.
+        if (FORM.equals(component.getType())) {
+            validateNextNodeReference(component.getComponents());
+        }
+    }
+
+    /**
+     * Check if there are any workflow associations for the given flow type in the tenant.
+     *
+     * @param flowType The flow type to check for workflow associations.
+     * @return True if there are workflow associations, false otherwise.
+     */
+    public static boolean isWorkflowEnabled(Constants.FlowTypes flowType) {
+
+        try {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Retrieving workflow associations for SELF_REGISTER_USER operation for tenant: " +
+                        CarbonContext.getThreadLocalCarbonContext().getTenantDomain());
+            }
+            WorkflowManagementService workflowManagementService = FlowMgtServiceHolder.getWorkflowManagementService();
+            List<Association> associationList = workflowManagementService.listPaginatedAssociations(
+                    CarbonContext.getThreadLocalCarbonContext().getTenantId(), 1, 0,
+                    WORKFLOW_FILTERS.get(flowType));
+            if (CollectionUtils.isNotEmpty(associationList)) {
+                return true;
+            }
+        } catch (WorkflowException e) {
+            LOG.error("Error while retrieving workflow associations for tenant: " +
+                    CarbonContext.getThreadLocalCarbonContext().getTenantDomain(), e);
+            return false;
+        }
+        return false;
     }
 }

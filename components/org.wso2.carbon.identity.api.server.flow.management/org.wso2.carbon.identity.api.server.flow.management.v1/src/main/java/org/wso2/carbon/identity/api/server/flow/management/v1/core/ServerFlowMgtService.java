@@ -38,12 +38,14 @@ import org.wso2.carbon.identity.flow.mgt.model.FlowDTO;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.wso2.carbon.identity.api.server.flow.management.v1.utils.Utils.collectFlowData;
 import static org.wso2.carbon.identity.api.server.flow.management.v1.utils.Utils.validateExecutors;
 import static org.wso2.carbon.identity.api.server.flow.management.v1.utils.Utils.validateIdentifiers;
+import static org.wso2.carbon.identity.api.server.flow.management.v1.utils.Utils.validateNodeConnectivity;
 
 /**
  * Service class for flow management.
@@ -116,6 +118,22 @@ public class ServerFlowMgtService {
     }
 
     /**
+     * Delete the flow for a specific flow type.
+     *
+     * @param flowType Type of the flow.
+     */
+    public void deleteFlow(String flowType) {
+
+        try {
+            Utils.validateFlowType(flowType);
+            flowMgtService.deleteFlow(flowType,
+                    PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId());
+        } catch (FlowMgtFrameworkException e) {
+            throw Utils.handleFlowMgtException(e);
+        }
+    }
+
+    /**
      * Retrieve the flow configurations.
      *
      * @return List of FlowConfig.
@@ -163,14 +181,33 @@ public class ServerFlowMgtService {
             FlowConfigDTO existingFlowConfig = flowMgtService.getFlowConfig(
                     flowConfigPatchModel.getFlowType(),
                     PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId());
-            // If the patch model does not contain values for isEnabled or isAutoLoginEnabled,
+            // If the patch model does not contain values for isEnabled or any properties,
             // retain the existing values from the flow configuration.
             if (existingFlowConfig != null) {
                 if (flowConfigPatchModel.getIsEnabled() == null) {
                     flowConfigPatchModel.setIsEnabled(existingFlowConfig.getIsEnabled());
                 }
-                if (flowConfigPatchModel.getIsAutoLoginEnabled() == null) {
-                    flowConfigPatchModel.setIsAutoLoginEnabled(existingFlowConfig.getIsAutoLoginEnabled());
+
+                Map<String, String> existingFlowCompletionConfigs = existingFlowConfig.getAllFlowCompletionConfigs();
+                Map<String, String> patchFlowCompletionConfigs = flowConfigPatchModel.getFlowCompletionConfigs();
+                List<String> supportedFlowCompletionConfigs = Utils.getSupportedFlowCompletionConfig(
+                        flowConfigPatchModel.getFlowType());
+                // Validate the configs provided in the patch model.
+                if (patchFlowCompletionConfigs != null) {
+                    for (Map.Entry<String, String> entry : patchFlowCompletionConfigs.entrySet()) {
+                        String key = entry.getKey();
+                        String value = entry.getValue();
+                        Utils.validateFlowCompletionConfig(key, value,
+                                supportedFlowCompletionConfigs, flowConfigPatchModel.getFlowType());
+                    }
+                }
+                // Iterate over existing configs and add those which are not present in the patch model.
+                for (Map.Entry<String, String> entry : existingFlowCompletionConfigs.entrySet()) {
+                    String key = entry.getKey();
+                    String value = entry.getValue();
+                    if (patchFlowCompletionConfigs == null || !patchFlowCompletionConfigs.containsKey(key)) {
+                        flowConfigPatchModel.putFlowCompletionConfigsItem(key, value);
+                    }
                 }
             }
             FlowConfigDTO updatedFlowConfig =
@@ -195,6 +232,7 @@ public class ServerFlowMgtService {
         Set<String> flowFieldIdentifiers = new HashSet<>();
         Set<String> flowComponentIds = new HashSet<>();
         collectFlowData(flowSteps, flowExecutorNames, flowFieldIdentifiers, flowComponentIds);
+        validateNodeConnectivity(flowSteps);
         validateExecutors(metaResponseHandler, flowExecutorNames);
         validateIdentifiers(metaResponseHandler, flowFieldIdentifiers);
     }
